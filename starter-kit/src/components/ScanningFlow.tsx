@@ -63,7 +63,7 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
           sad += Math.abs(data[i] - prev[i]) + Math.abs(data[i + 1] - prev[i + 1]) + Math.abs(data[i + 2] - prev[i + 2]);
         }
         const meanSad = sad / (32 * 32);
-        const isStable = meanSad < 8;
+        const isStable = meanSad < 18;
 
         if (isStable) {
           stableFramesRef.current += 1;
@@ -117,6 +117,7 @@ const VIEWS = [
 export default function ScanningFlow() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [camReady, setCamReady] = useState(false);
+  const [camError, setCamError] = useState<string | null>(null);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
 
@@ -124,9 +125,10 @@ export default function ScanningFlow() {
   const { tier, reset } = useStabilityScore(videoRef, scanActive);
 
   useEffect(() => {
+    let stream: MediaStream | null = null;
     async function startCamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
         });
         if (videoRef.current) {
@@ -135,9 +137,11 @@ export default function ScanningFlow() {
         }
       } catch (err) {
         console.error("Camera access denied", err);
+        setCamError("Camera access required for scan — refresh and try again.");
       }
     }
     startCamera();
+    return () => stream?.getTracks().forEach(t => t.stop());
   }, []);
 
   const handleCapture = useCallback(() => {
@@ -170,6 +174,12 @@ export default function ScanningFlow() {
         </span>
       </div>
 
+
+      {camError && (
+        <div className="w-full max-w-md px-4 py-3 mt-2 bg-red-900/60 border border-red-700 rounded text-sm text-red-200 text-center">
+          {camError}
+        </div>
+      )}
 
       {/* Main Viewport */}
       <div className="relative w-full max-w-md aspect-[3/4] bg-zinc-950 overflow-hidden flex items-center justify-center mt-1">
