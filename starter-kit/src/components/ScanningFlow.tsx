@@ -214,6 +214,7 @@ export default function ScanningFlow() {
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
+    if (showTutorial) return;
     let stream: MediaStream | null = null;
     async function startCamera() {
       try {
@@ -231,7 +232,7 @@ export default function ScanningFlow() {
     }
     startCamera();
     return () => stream?.getTracks().forEach(t => t.stop());
-  }, []);
+  }, [showTutorial]);
 
   const handleCapture = useCallback(() => {
     const video = videoRef.current;
