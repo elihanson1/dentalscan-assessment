@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Camera, CheckCircle2 } from "lucide-react";
+import { Camera, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const VIEWS = [
@@ -12,8 +12,202 @@ const VIEWS = [
   { label: "Lower Teeth", instruction: "Tilt your head down and open wide." },
 ];
 
+function FaceIllustration({ step }: { step: number }) {
+  const containerTransforms: Record<number, string> = {
+    0: "perspective(400px) rotateY(0deg)",
+    1: "perspective(400px) rotateY(35deg)",
+    2: "perspective(400px) rotateY(-35deg)",
+    3: "perspective(400px) rotateX(30deg)",
+    4: "perspective(400px) rotateX(-25deg)",
+  };
+
+  return (
+    <div
+      className="flex items-center justify-center"
+      style={{ transform: containerTransforms[step], transition: "transform 0.4s ease" }}
+    >
+      <svg viewBox="0 0 200 250" className="w-40 h-auto" style={{ filter: "drop-shadow(0 0 10px #14b8a688)" }}>
+        {/* Head */}
+        <path
+          d="M100,12 C150,12 178,50 178,95 C178,148 158,190 132,204 C122,212 100,216 100,216 C100,216 78,212 68,204 C42,190 22,148 22,95 C22,50 50,12 100,12 Z"
+          fill="none"
+          stroke="#14b8a6"
+          strokeWidth="3"
+          strokeDasharray="6 4"
+        />
+        {/* Chin */}
+        <path
+          d="M68,204 C78,228 122,228 132,204"
+          fill="none"
+          stroke="#14b8a6"
+          strokeWidth="2"
+          strokeDasharray="4 4"
+          opacity="0.5"
+        />
+        {/* Eyes */}
+        <ellipse cx="72" cy="100" rx="10" ry="7" fill="none" stroke="#14b8a6" strokeWidth="1.5" opacity="0.6" />
+        <ellipse cx="128" cy="100" rx="10" ry="7" fill="none" stroke="#14b8a6" strokeWidth="1.5" opacity="0.6" />
+        {/* Mouth */}
+        <path
+          d="M78,155 C88,164 112,164 122,155"
+          fill="none"
+          stroke="#14b8a6"
+          strokeWidth="2"
+          opacity="0.6"
+        />
+        {/* Step-specific arrow */}
+        {step === 1 && (
+          <g>
+            <line x1="175" y1="110" x2="140" y2="110" stroke="#14b8a6" strokeWidth="2.5" />
+            <polyline points="148,102 140,110 148,118" fill="none" stroke="#14b8a6" strokeWidth="2.5" strokeLinejoin="round" />
+          </g>
+        )}
+        {step === 2 && (
+          <g>
+            <line x1="25" y1="110" x2="60" y2="110" stroke="#14b8a6" strokeWidth="2.5" />
+            <polyline points="52,102 60,110 52,118" fill="none" stroke="#14b8a6" strokeWidth="2.5" strokeLinejoin="round" />
+          </g>
+        )}
+        {step === 3 && (
+          <g>
+            <line x1="100" y1="20" x2="100" y2="50" stroke="#14b8a6" strokeWidth="2.5" />
+            <polyline points="92,28 100,20 108,28" fill="none" stroke="#14b8a6" strokeWidth="2.5" strokeLinejoin="round" />
+          </g>
+        )}
+        {step === 4 && (
+          <g>
+            <line x1="100" y1="230" x2="100" y2="200" stroke="#14b8a6" strokeWidth="2.5" />
+            <polyline points="92,222 100,230 108,222" fill="none" stroke="#14b8a6" strokeWidth="2.5" strokeLinejoin="round" />
+          </g>
+        )}
+      </svg>
+    </div>
+  );
+}
+
+const TUTORIAL_SLIDES = [
+  {
+    title: "Front View",
+    description: "Face the camera straight on with a relaxed smile. Keep your chin level.",
+  },
+  {
+    title: "Left Side",
+    description: "Turn your head to the left so the camera sees your right cheek.",
+  },
+  {
+    title: "Right Side",
+    description: "Turn your head to the right so the camera sees your left cheek.",
+  },
+  {
+    title: "Upper Teeth",
+    description: "Tilt your head back and open your mouth wide to show your upper teeth.",
+  },
+  {
+    title: "Lower Teeth",
+    description: "Tilt your head down and open your mouth wide to show your lower teeth.",
+  },
+];
+
+function Tutorial({ onDone }: { onDone: () => void }) {
+  const [slide, setSlide] = useState(0);
+  const dragStartX = useRef(0);
+
+  const goNext = () => setSlide((s) => Math.min(s + 1, TUTORIAL_SLIDES.length - 1));
+  const goPrev = () => setSlide((s) => Math.max(s - 1, 0));
+
+  return (
+    <div className="flex flex-col items-center bg-black min-h-screen text-white">
+      <div className="p-4 w-full bg-zinc-900 border-b border-zinc-800 flex justify-between items-center">
+        <h1 className="font-bold text-teal-400">DentalScan AI</h1>
+        <span className="text-xs text-zinc-500">How it works</span>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md px-6 gap-8">
+        {/* Illustration */}
+        <div
+          className="w-full flex items-center justify-center py-8"
+          onPointerDown={(e) => { dragStartX.current = e.clientX; }}
+          onPointerUp={(e) => {
+            const delta = e.clientX - dragStartX.current;
+            if (delta < -40) goNext();
+            else if (delta > 40) goPrev();
+          }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={slide}
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }}
+              transition={{ duration: 0.25 }}
+              className="flex flex-col items-center gap-6"
+            >
+              <FaceIllustration step={slide} />
+              <div className="text-center">
+                <h2 className="text-lg font-bold text-white mb-2">{TUTORIAL_SLIDES[slide].title}</h2>
+                <p className="text-sm text-zinc-400 leading-relaxed">{TUTORIAL_SLIDES[slide].description}</p>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Dot indicators */}
+        <div className="flex gap-2">
+          {TUTORIAL_SLIDES.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setSlide(i)}
+              className={`w-2 h-2 rounded-full transition-colors ${i === slide ? "bg-teal-400" : "bg-zinc-600"}`}
+            />
+          ))}
+        </div>
+
+        {/* Navigation */}
+        <div className="flex w-full items-center justify-between gap-4">
+          <button
+            onClick={goPrev}
+            disabled={slide === 0}
+            className="p-2 rounded-full border border-zinc-700 disabled:opacity-20 text-zinc-400"
+          >
+            <ChevronLeft size={20} />
+          </button>
+
+          {slide === TUTORIAL_SLIDES.length - 1 ? (
+            <button
+              onClick={onDone}
+              className="flex-1 py-3 rounded-full bg-teal-500 text-black font-bold text-sm tracking-wide active:scale-95 transition-transform"
+            >
+              Got it — Start Scan
+            </button>
+          ) : (
+            <button
+              onClick={goNext}
+              className="flex-1 py-3 rounded-full border border-zinc-700 text-white text-sm active:scale-95 transition-transform"
+            >
+              Next
+            </button>
+          )}
+
+          <button
+            onClick={goNext}
+            disabled={slide === TUTORIAL_SLIDES.length - 1}
+            className="p-2 rounded-full border border-zinc-700 disabled:opacity-20 text-zinc-400"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        <button onClick={onDone} className="text-xs text-zinc-600 underline">
+          Skip
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ScanningFlow() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [showTutorial, setShowTutorial] = useState(true);
   const [camReady, setCamReady] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
@@ -54,6 +248,10 @@ export default function ScanningFlow() {
     }
   }, []);
 
+  if (showTutorial) {
+    return <Tutorial onDone={() => setShowTutorial(false)} />;
+  }
+
   return (
     <div className="flex flex-col items-center bg-black min-h-screen text-white">
       {/* Header */}
@@ -82,7 +280,7 @@ export default function ScanningFlow() {
               className="w-full h-full object-cover"
             />
 
-            {/* Head outline overlay — all steps */}
+            {/* Head outline overlay */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               <svg
                 viewBox="0 0 200 250"
@@ -134,7 +332,7 @@ export default function ScanningFlow() {
         )}
       </div>
 
-      {/* Capture button — always active once camera is ready */}
+      {/* Capture button */}
       <div className="p-10 w-full flex justify-center">
         {currentStep < 5 && (
           <button
