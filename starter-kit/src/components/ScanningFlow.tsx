@@ -29,7 +29,7 @@ const STABILITY_LABELS: Record<StabilityTier, string> = {
 function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: boolean) {
   const [tier, setTier] = useState<StabilityTier>("low");
   const rafRef = useRef<number>(0);
-  const prevBrightnessRef = useRef<number | null>(null);
+  const prevPixelsRef = useRef<Uint8ClampedArray | null>(null);
   const stableFramesRef = useRef(0);
   const unstableFramesRef = useRef(0);
   const currentTierRef = useRef<StabilityTier>("low");
@@ -54,18 +54,16 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
       }
 
       ctx.drawImage(video, 0, 0, 32, 32);
-      const data = ctx.getImageData(0, 0, 32, 32).data;
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
-      }
-      const brightness = sum / (32 * 32);
-      const prev = prevBrightnessRef.current;
-      prevBrightnessRef.current = brightness;
+      const { data } = ctx.getImageData(0, 0, 32, 32);
+      const prev = prevPixelsRef.current;
 
       if (prev !== null) {
-        const delta = Math.abs(brightness - prev);
-        const isStable = delta < 1.5;
+        let sad = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          sad += Math.abs(data[i] - prev[i]) + Math.abs(data[i + 1] - prev[i + 1]) + Math.abs(data[i + 2] - prev[i + 2]);
+        }
+        const meanSad = sad / (32 * 32);
+        const isStable = meanSad < 8;
 
         if (isStable) {
           stableFramesRef.current += 1;
@@ -78,10 +76,10 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
         const cur = currentTierRef.current;
         let next = cur;
 
-        if (cur === "low" && stableFramesRef.current >= 8) next = "medium";
-        else if (cur === "medium" && stableFramesRef.current >= 15) next = "high";
-        else if (cur === "high" && unstableFramesRef.current >= 10) next = "medium";
-        else if (cur === "medium" && unstableFramesRef.current >= 10) next = "low";
+        if (cur === "low" && stableFramesRef.current >= 20) next = "medium";
+        else if (cur === "medium" && stableFramesRef.current >= 35) next = "high";
+        else if (cur === "high" && unstableFramesRef.current >= 5) next = "medium";
+        else if (cur === "medium" && unstableFramesRef.current >= 5) next = "low";
 
         if (next !== cur) {
           currentTierRef.current = next;
@@ -89,6 +87,7 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
         }
       }
 
+      prevPixelsRef.current = new Uint8ClampedArray(data);
       rafRef.current = requestAnimationFrame(sample);
     }
 
@@ -100,6 +99,7 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
     stableFramesRef.current = 0;
     unstableFramesRef.current = 0;
     currentTierRef.current = "low";
+    prevPixelsRef.current = null;
     setTier("low");
   }, []);
 
@@ -170,12 +170,6 @@ export default function ScanningFlow() {
         </span>
       </div>
 
-      {/* Step instruction banner */}
-      {currentStep < 5 && (
-        <div className="w-full max-w-md px-4 pt-3 pb-1 text-center">
-          <p className="text-xs text-zinc-400 uppercase tracking-widest">{VIEWS[currentStep].instruction}</p>
-        </div>
-      )}
 
       {/* Main Viewport */}
       <div className="relative w-full max-w-md aspect-[3/4] bg-zinc-950 overflow-hidden flex items-center justify-center mt-1">
@@ -251,7 +245,21 @@ export default function ScanningFlow() {
               </AnimatePresence>
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black to-transparent" />
+            <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none">
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={currentStep}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25 }}
+                  className="text-[11px] text-zinc-300 uppercase tracking-widest px-4 text-center"
+                >
+                  {VIEWS[currentStep].instruction}
+                </motion.p>
+              </AnimatePresence>
+            </div>
           </>
         ) : (
           <div className="text-center p-10">
