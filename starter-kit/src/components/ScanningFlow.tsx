@@ -1,121 +1,8 @@
 "use client";
 
-/**
- * CHALLENGE: SCAN ENHANCEMENT
- *
- * 1. Visual Guidance Overlay — SVG ellipse + inner tooth-row silhouette centered on the video feed.
- * 2. Real-time stability feedback — pixel-variance sampler with hysteresis so color doesn't oscillate.
- * 3. Capture button locked (grey) until stability reaches "high" (green), then unlocks.
- */
-
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Camera, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-type StabilityTier = "low" | "medium" | "high";
-
-const STABILITY_COLORS: Record<StabilityTier, string> = {
-  low: "#ef4444",
-  medium: "#f59e0b",
-  high: "#22c55e",
-};
-
-const STABILITY_LABELS: Record<StabilityTier, string> = {
-  low: "Hold steady…",
-  medium: "Almost there…",
-  high: "Ready — tap to capture",
-};
-
-function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: boolean) {
-  const [tier, setTier] = useState<StabilityTier>("low");
-  const rafRef = useRef<number>(0);
-  const prevPixelsRef = useRef<Uint8ClampedArray | null>(null);
-  const stableFramesRef = useRef(0);
-  const unstableFramesRef = useRef(0);
-  const currentTierRef = useRef<StabilityTier>("low");
-  const samplerCanvas = useRef<HTMLCanvasElement | null>(null);
-  const warmupFramesRef = useRef(0);
-
-  useEffect(() => {
-    if (!active) return;
-
-    if (!samplerCanvas.current) {
-      samplerCanvas.current = document.createElement("canvas");
-      samplerCanvas.current.width = 32;
-      samplerCanvas.current.height = 32;
-    }
-    const canvas = samplerCanvas.current;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-    function sample() {
-      const video = videoRef.current;
-      if (!video || !ctx || video.readyState < 2) {
-        rafRef.current = requestAnimationFrame(sample);
-        return;
-      }
-
-      // Skip first 30 frames so auto-exposure can settle before measuring stability
-      if (warmupFramesRef.current < 30) {
-        warmupFramesRef.current += 1;
-        ctx.drawImage(video, 0, 0, 32, 32);
-        prevPixelsRef.current = new Uint8ClampedArray(ctx.getImageData(0, 0, 32, 32).data);
-        rafRef.current = requestAnimationFrame(sample);
-        return;
-      }
-
-      ctx.drawImage(video, 0, 0, 32, 32);
-      const { data } = ctx.getImageData(0, 0, 32, 32);
-      const prev = prevPixelsRef.current;
-
-      if (prev !== null) {
-        let sad = 0;
-        for (let i = 0; i < data.length; i += 4) {
-          sad += Math.abs(data[i] - prev[i]) + Math.abs(data[i + 1] - prev[i + 1]) + Math.abs(data[i + 2] - prev[i + 2]);
-        }
-        const meanSad = sad / (32 * 32);
-        const isStable = meanSad < 18;
-
-        if (isStable) {
-          stableFramesRef.current += 1;
-          unstableFramesRef.current = 0;
-        } else {
-          unstableFramesRef.current += 1;
-          stableFramesRef.current = 0;
-        }
-
-        const cur = currentTierRef.current;
-        let next = cur;
-
-        if (cur === "low" && stableFramesRef.current >= 20) next = "medium";
-        else if (cur === "medium" && stableFramesRef.current >= 35) next = "high";
-        else if (cur === "high" && unstableFramesRef.current >= 5) next = "medium";
-        else if (cur === "medium" && unstableFramesRef.current >= 5) next = "low";
-
-        if (next !== cur) {
-          currentTierRef.current = next;
-          setTier(next);
-        }
-      }
-
-      prevPixelsRef.current = new Uint8ClampedArray(data);
-      rafRef.current = requestAnimationFrame(sample);
-    }
-
-    rafRef.current = requestAnimationFrame(sample);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [active, videoRef]);
-
-  const reset = useCallback(() => {
-    stableFramesRef.current = 0;
-    unstableFramesRef.current = 0;
-    currentTierRef.current = "low";
-    prevPixelsRef.current = null;
-    warmupFramesRef.current = 0;
-    setTier("low");
-  }, []);
-
-  return { tier, reset };
-}
 
 const VIEWS = [
   { label: "Front View", instruction: "Smile and look straight at the camera." },
@@ -132,9 +19,6 @@ export default function ScanningFlow() {
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
 
-  const scanActive = camReady && currentStep < 5;
-  const { tier, reset } = useStabilityScore(videoRef, scanActive);
-
   useEffect(() => {
     let stream: MediaStream | null = null;
     async function startCamera() {
@@ -148,7 +32,7 @@ export default function ScanningFlow() {
         }
       } catch (err) {
         console.error("Camera access denied", err);
-        setCamError("Camera access required for scan — refresh and try again");
+        setCamError("Camera access required for scan — refresh and try again.");
       }
     }
     startCamera();
@@ -158,7 +42,6 @@ export default function ScanningFlow() {
   const handleCapture = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -168,12 +51,8 @@ export default function ScanningFlow() {
       const dataUrl = canvas.toDataURL("image/jpeg");
       setCapturedImages((prev) => [...prev, dataUrl]);
       setCurrentStep((prev) => prev + 1);
-      reset();
     }
-  }, [reset]);
-
-  const overlayColor = STABILITY_COLORS[tier];
-  const canCapture = tier === "high";
+  }, []);
 
   return (
     <div className="flex flex-col items-center bg-black min-h-screen text-white">
@@ -184,7 +63,6 @@ export default function ScanningFlow() {
           {currentStep < 5 ? `${VIEWS[currentStep].label} · Step ${currentStep + 1}/5` : "Complete"}
         </span>
       </div>
-
 
       {camError && (
         <div className="w-full max-w-md px-4 py-3 mt-2 bg-red-900/60 border border-red-700 rounded text-sm text-red-200 text-center">
@@ -204,86 +82,33 @@ export default function ScanningFlow() {
               className="w-full h-full object-cover"
             />
 
-            {/* View-specific guidance overlay */}
+            {/* Head outline overlay — all steps */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              {currentStep <= 2 ? (
-                <svg
-                  viewBox="0 0 200 250"
-                  className="w-[52%]"
-                  style={{ filter: `drop-shadow(0 0 6px ${overlayColor}88)` }}
-                >
-                  <motion.path
-                    d="M100,12 C150,12 178,50 178,95 C178,148 158,190 132,204 C122,212 100,216 100,216 C100,216 78,212 68,204 C42,190 22,148 22,95 C22,50 50,12 100,12 Z"
-                    fill="none"
-                    strokeWidth="2.5"
-                    strokeDasharray="6 4"
-                    animate={{ stroke: overlayColor }}
-                    transition={{ duration: 0.4 }}
-                  />
-                  {/* Chin curve */}
-                  <motion.path
-                    d="M68,204 C78,228 122,228 132,204"
-                    fill="none"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    animate={{ stroke: overlayColor, opacity: 0.4 }}
-                    transition={{ duration: 0.4 }}
-                  />
-                  {/* Mouth area hint */}
-                  <motion.path
-                    d="M65,158 C72,168 100,172 135,158"
-                    fill="none"
-                    strokeWidth="1.2"
-                    strokeDasharray="3 4"
-                    animate={{ stroke: overlayColor, opacity: 0.35 }}
-                    transition={{ duration: 0.4 }}
-                  />
-                </svg>
-              ) : (
-                <svg
-                  viewBox="0 0 200 100"
-                  className="w-[78%]"
-                  style={{ filter: `drop-shadow(0 0 6px ${overlayColor}88)` }}
-                >
-                  {/* Lips with cupid's bow */}
-                  <motion.path
-                    d="M18,52 C22,36 46,22 66,28 C78,32 88,44 100,41 C112,44 122,32 134,28 C154,22 178,36 182,52 C168,74 134,86 100,88 C66,86 32,74 18,52 Z"
-                    fill="none"
-                    strokeWidth="2.5"
-                    strokeDasharray="6 4"
-                    animate={{ stroke: overlayColor }}
-                    transition={{ duration: 0.4 }}
-                  />
-                  {/* Tooth line */}
-                  <motion.path
-                    d="M18,52 C50,46 80,44 100,44 C120,44 150,46 182,52"
-                    fill="none"
-                    strokeWidth="1.5"
-                    strokeDasharray="3 4"
-                    animate={{ stroke: overlayColor, opacity: 0.5 }}
-                    transition={{ duration: 0.4 }}
-                  />
-                </svg>
-              )}
+              <svg
+                viewBox="0 0 200 250"
+                className="w-[72%]"
+                style={{ filter: "drop-shadow(0 0 8px #ffffff44)" }}
+              >
+                <path
+                  d="M100,12 C150,12 178,50 178,95 C178,148 158,190 132,204 C122,212 100,216 100,216 C100,216 78,212 68,204 C42,190 22,148 22,95 C22,50 50,12 100,12 Z"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2.5"
+                  strokeDasharray="6 4"
+                  opacity="0.7"
+                />
+                <path
+                  d="M68,204 C78,228 122,228 132,204"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                  opacity="0.35"
+                />
+              </svg>
             </div>
 
-            {/* Stability label */}
-            <div className="absolute top-3 left-0 right-0 flex justify-center pointer-events-none">
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key={tier}
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  transition={{ duration: 0.2 }}
-                  className="text-[11px] font-medium px-3 py-1 rounded-full bg-black/60 backdrop-blur-sm"
-                  style={{ color: overlayColor }}
-                >
-                  {STABILITY_LABELS[tier]}
-                </motion.span>
-              </AnimatePresence>
-            </div>
-
+            {/* Instruction */}
             <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black to-transparent" />
             <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none">
               <AnimatePresence mode="wait">
@@ -309,27 +134,18 @@ export default function ScanningFlow() {
         )}
       </div>
 
-      {/* Capture button — locked (grey) until stability is high (green) */}
+      {/* Capture button — always active once camera is ready */}
       <div className="p-10 w-full flex justify-center">
         {currentStep < 5 && (
-          <motion.button
+          <button
             onClick={handleCapture}
-            disabled={!canCapture}
-            animate={{
-              borderColor: canCapture ? "#22c55e" : "#52525b",
-              scale: canCapture ? 1 : 0.95,
-            }}
-            transition={{ duration: 0.3 }}
-            className="w-20 h-20 rounded-full border-4 flex items-center justify-center active:scale-90 transition-transform disabled:cursor-not-allowed"
+            disabled={!camReady}
+            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center active:scale-90 transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <motion.div
-              animate={{ backgroundColor: canCapture ? "#22c55e" : "#3f3f46" }}
-              transition={{ duration: 0.3 }}
-              className="w-16 h-16 rounded-full flex items-center justify-center"
-            >
-              <Camera className={canCapture ? "text-white" : "text-zinc-500"} />
-            </motion.div>
-          </motion.button>
+            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
+              <Camera className="text-black" />
+            </div>
+          </button>
         )}
       </div>
 
