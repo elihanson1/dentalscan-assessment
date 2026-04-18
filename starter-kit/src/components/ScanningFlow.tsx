@@ -4,10 +4,86 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Camera, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+type StabilityTier = "low" | "medium" | "high";
+
+const STABILITY_COLORS: Record<StabilityTier, string> = {
+  low: "#ef4444",
+  medium: "#f59e0b",
+  high: "#22c55e",
+};
+
+function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: boolean) {
+  const [tier, setTier] = useState<StabilityTier>("low");
+  const rafRef = useRef<number>(0);
+  const prevPixelsRef = useRef<Uint8ClampedArray | null>(null);
+  const stableFramesRef = useRef(0);
+  const unstableFramesRef = useRef(0);
+  const currentTierRef = useRef<StabilityTier>("low");
+  const samplerCanvas = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    if (!samplerCanvas.current) {
+      samplerCanvas.current = document.createElement("canvas");
+      samplerCanvas.current.width = 32;
+      samplerCanvas.current.height = 32;
+    }
+    const canvas = samplerCanvas.current;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    function sample() {
+      const video = videoRef.current;
+      if (!video || !ctx || video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(sample);
+        return;
+      }
+      ctx.drawImage(video, 0, 0, 32, 32);
+      const { data } = ctx.getImageData(0, 0, 32, 32);
+      const prev = prevPixelsRef.current;
+
+      if (prev !== null) {
+        let sad = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          sad += Math.abs(data[i] - prev[i]) + Math.abs(data[i + 1] - prev[i + 1]) + Math.abs(data[i + 2] - prev[i + 2]);
+        }
+        const isStable = sad / (32 * 32) < 18;
+
+        if (isStable) { stableFramesRef.current += 1; unstableFramesRef.current = 0; }
+        else { unstableFramesRef.current += 1; stableFramesRef.current = 0; }
+
+        const cur = currentTierRef.current;
+        let next = cur;
+        if (cur === "low" && stableFramesRef.current >= 20) next = "medium";
+        else if (cur === "medium" && stableFramesRef.current >= 35) next = "high";
+        else if (cur === "high" && unstableFramesRef.current >= 5) next = "medium";
+        else if (cur === "medium" && unstableFramesRef.current >= 5) next = "low";
+
+        if (next !== cur) { currentTierRef.current = next; setTier(next); }
+      }
+
+      prevPixelsRef.current = new Uint8ClampedArray(data);
+      rafRef.current = requestAnimationFrame(sample);
+    }
+
+    rafRef.current = requestAnimationFrame(sample);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [active, videoRef]);
+
+  const reset = useCallback(() => {
+    stableFramesRef.current = 0;
+    unstableFramesRef.current = 0;
+    currentTierRef.current = "low";
+    prevPixelsRef.current = null;
+    setTier("low");
+  }, []);
+
+  return { tier, reset };
+}
+
 const VIEWS = [
-  { label: "Front View", instruction: "Smile and look straight at the camera." },
-  { label: "Left View", instruction: "Turn your head to the left." },
-  { label: "Right View", instruction: "Turn your head to the right." },
+  { label: "Front View", instruction: "Smile with your teeth and look straight at the camera." },
+  { label: "Left View", instruction: "Keep smiling and turn your head to the left." },
+  { label: "Right View", instruction: "Keep smiling and turn your head to the right." },
   { label: "Upper Teeth", instruction: "Tilt your head back and open wide." },
   { label: "Lower Teeth", instruction: "Tilt your head down and open wide." },
 ];
@@ -213,6 +289,10 @@ export default function ScanningFlow() {
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
 
+  const scanActive = camReady && currentStep < 5;
+  const { tier, reset } = useStabilityScore(videoRef, scanActive);
+  const overlayColor = STABILITY_COLORS[tier];
+
   useEffect(() => {
     if (showTutorial) return;
     let stream: MediaStream | null = null;
@@ -246,8 +326,9 @@ export default function ScanningFlow() {
       const dataUrl = canvas.toDataURL("image/jpeg");
       setCapturedImages((prev) => [...prev, dataUrl]);
       setCurrentStep((prev) => prev + 1);
+      reset();
     }
-  }, []);
+  }, [reset]);
 
   if (showTutorial) {
     return <Tutorial onDone={() => setShowTutorial(false)} />;
@@ -286,23 +367,23 @@ export default function ScanningFlow() {
               <svg
                 viewBox="0 0 200 250"
                 className="w-[72%]"
-                style={{ filter: "drop-shadow(0 0 8px #ffffff44)" }}
+                style={{ filter: `drop-shadow(0 0 8px ${overlayColor}66)` }}
               >
-                <path
+                <motion.path
                   d="M100,12 C150,12 178,50 178,95 C178,148 158,190 132,204 C122,212 100,216 100,216 C100,216 78,212 68,204 C42,190 22,148 22,95 C22,50 50,12 100,12 Z"
                   fill="none"
-                  stroke="white"
                   strokeWidth="2.5"
                   strokeDasharray="6 4"
-                  opacity="0.7"
+                  animate={{ stroke: overlayColor }}
+                  transition={{ duration: 0.4 }}
                 />
-                <path
+                <motion.path
                   d="M68,204 C78,228 122,228 132,204"
                   fill="none"
-                  stroke="white"
                   strokeWidth="1.5"
                   strokeDasharray="4 4"
-                  opacity="0.35"
+                  animate={{ stroke: overlayColor, opacity: 0.45 }}
+                  transition={{ duration: 0.4 }}
                 />
               </svg>
             </div>
