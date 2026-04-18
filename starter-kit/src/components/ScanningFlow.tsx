@@ -34,6 +34,7 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
   const unstableFramesRef = useRef(0);
   const currentTierRef = useRef<StabilityTier>("low");
   const samplerCanvas = useRef<HTMLCanvasElement | null>(null);
+  const warmupFramesRef = useRef(0);
 
   useEffect(() => {
     if (!active) return;
@@ -49,6 +50,15 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
     function sample() {
       const video = videoRef.current;
       if (!video || !ctx || video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(sample);
+        return;
+      }
+
+      // Skip first 30 frames so auto-exposure can settle before measuring stability
+      if (warmupFramesRef.current < 30) {
+        warmupFramesRef.current += 1;
+        ctx.drawImage(video, 0, 0, 32, 32);
+        prevPixelsRef.current = new Uint8ClampedArray(ctx.getImageData(0, 0, 32, 32).data);
         rafRef.current = requestAnimationFrame(sample);
         return;
       }
@@ -100,6 +110,7 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
     unstableFramesRef.current = 0;
     currentTierRef.current = "low";
     prevPixelsRef.current = null;
+    warmupFramesRef.current = 0;
     setTier("low");
   }, []);
 
@@ -137,7 +148,7 @@ export default function ScanningFlow() {
         }
       } catch (err) {
         console.error("Camera access denied", err);
-        setCamError("Camera access required for scan — refresh and try again.");
+        setCamError("Camera access required for scan — refresh and try again");
       }
     }
     startCamera();
@@ -193,49 +204,67 @@ export default function ScanningFlow() {
               className="w-full h-full object-cover"
             />
 
-            {/* Mouth guidance overlay */}
+            {/* View-specific guidance overlay */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <svg
-                viewBox="0 0 200 120"
-                className="w-[72%]"
-                style={{ filter: `drop-shadow(0 0 6px ${overlayColor}88)` }}
-              >
-                {/* Outer ellipse — framing guide */}
-                <motion.ellipse
-                  cx="100"
-                  cy="60"
-                  rx="96"
-                  ry="56"
-                  fill="none"
-                  strokeWidth="2.5"
-                  strokeDasharray="6 4"
-                  animate={{ stroke: overlayColor }}
-                  transition={{ duration: 0.4 }}
-                />
-                {/* Inner tooth-row silhouette */}
-                <motion.rect
-                  x="30"
-                  y="38"
-                  width="140"
-                  height="44"
-                  rx="22"
-                  fill="none"
-                  strokeWidth="1.5"
-                  animate={{ stroke: overlayColor, opacity: 0.45 }}
-                  transition={{ duration: 0.4 }}
-                />
-                {/* Divider between upper/lower teeth */}
-                <motion.line
-                  x1="32"
-                  y1="60"
-                  x2="168"
-                  y2="60"
-                  strokeWidth="1"
-                  strokeDasharray="3 5"
-                  animate={{ stroke: overlayColor, opacity: 0.3 }}
-                  transition={{ duration: 0.4 }}
-                />
-              </svg>
+              {currentStep <= 2 ? (
+                <svg
+                  viewBox="0 0 200 250"
+                  className="w-[52%]"
+                  style={{ filter: `drop-shadow(0 0 6px ${overlayColor}88)` }}
+                >
+                  <motion.path
+                    d="M100,12 C150,12 178,50 178,95 C178,148 158,190 132,204 C122,212 100,216 100,216 C100,216 78,212 68,204 C42,190 22,148 22,95 C22,50 50,12 100,12 Z"
+                    fill="none"
+                    strokeWidth="2.5"
+                    strokeDasharray="6 4"
+                    animate={{ stroke: overlayColor }}
+                    transition={{ duration: 0.4 }}
+                  />
+                  {/* Chin curve */}
+                  <motion.path
+                    d="M68,204 C78,228 122,228 132,204"
+                    fill="none"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                    animate={{ stroke: overlayColor, opacity: 0.4 }}
+                    transition={{ duration: 0.4 }}
+                  />
+                  {/* Mouth area hint */}
+                  <motion.path
+                    d="M65,158 C72,168 100,172 135,158"
+                    fill="none"
+                    strokeWidth="1.2"
+                    strokeDasharray="3 4"
+                    animate={{ stroke: overlayColor, opacity: 0.35 }}
+                    transition={{ duration: 0.4 }}
+                  />
+                </svg>
+              ) : (
+                <svg
+                  viewBox="0 0 200 100"
+                  className="w-[78%]"
+                  style={{ filter: `drop-shadow(0 0 6px ${overlayColor}88)` }}
+                >
+                  {/* Lips with cupid's bow */}
+                  <motion.path
+                    d="M18,52 C22,36 46,22 66,28 C78,32 88,44 100,41 C112,44 122,32 134,28 C154,22 178,36 182,52 C168,74 134,86 100,88 C66,86 32,74 18,52 Z"
+                    fill="none"
+                    strokeWidth="2.5"
+                    strokeDasharray="6 4"
+                    animate={{ stroke: overlayColor }}
+                    transition={{ duration: 0.4 }}
+                  />
+                  {/* Tooth line */}
+                  <motion.path
+                    d="M18,52 C50,46 80,44 100,44 C120,44 150,46 182,52"
+                    fill="none"
+                    strokeWidth="1.5"
+                    strokeDasharray="3 4"
+                    animate={{ stroke: overlayColor, opacity: 0.5 }}
+                    transition={{ duration: 0.4 }}
+                  />
+                </svg>
+              )}
             </div>
 
             {/* Stability label */}
