@@ -3,7 +3,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Camera, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
 type StabilityTier = "low" | "medium" | "high";
 
 const STABILITY_COLORS: Record<StabilityTier, string> = {
@@ -164,15 +163,15 @@ function FaceIllustration({ step }: { step: number }) {
 const TUTORIAL_SLIDES = [
   {
     title: "Front View",
-    description: "Face the camera straight on with a relaxed smile. Keep your chin level.",
+    description: "Face the camera straight on with a relaxed smile with your teeth showing. Keep your chin level.",
   },
   {
     title: "Left Side",
-    description: "Turn your head to the left so the camera sees your right cheek.",
+    description: "Keep smiling - Turn your head to the left so the camera sees your right cheek.",
   },
   {
     title: "Right Side",
-    description: "Turn your head to the right so the camera sees your left cheek.",
+    description: "Keep smiling - Turn your head to the right so the camera sees your left cheek.",
   },
   {
     title: "Upper Teeth",
@@ -321,13 +320,26 @@ export default function ScanningFlow() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(video, 0, 0);
-      const dataUrl = canvas.toDataURL("image/jpeg");
-      setCapturedImages((prev) => [...prev, dataUrl]);
-      setCurrentStep((prev) => prev + 1);
-      reset();
-    }
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg");
+
+    setCapturedImages((prev) => {
+      const next = [...prev, dataUrl];
+      // All 5 angles captured — submit to upload endpoint
+      if (next.length === VIEWS.length) {
+        void fetch("/api/scans/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ images: next }),
+        }).catch((err) => console.error("Upload failed:", err));
+      }
+      return next;
+    });
+
+    setCurrentStep((prev) => prev + 1);
+    reset();
   }, [reset]);
 
   if (showTutorial) {

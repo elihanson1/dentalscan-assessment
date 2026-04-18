@@ -8,20 +8,23 @@ datasource db {
 }
 
 model Scan {
-  id        String   @id @default(cuid())
-  status    String   @default("pending") // pending, completed, failed
-  images    String   @default("") // Comma-separated list of image URLs (SQLite doesn't support scalar lists)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String         @id @default(cuid())
+  status        String         @default("pending") // pending, completed, failed
+  images        String         @default("") // Comma-separated image URLs (SQLite has no scalar lists)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  notifications Notification[]
 }
 
 model Notification {
   id        String   @id @default(cuid())
+  scanId    String
   userId    String
   title     String
   message   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+  scan      Scan     @relation(fields: [scanId], references: [id])
 }
 
 model Thread {
