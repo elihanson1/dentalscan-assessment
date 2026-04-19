@@ -19,20 +19,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
-    const scan = await prisma.scan.findUnique({ where: { id: scanId } });
-    if (!scan) {
+    const notification = await prisma.$transaction(async (tx: typeof prisma) => {
+      const scan = await tx.scan.findUnique({ where: { id: scanId } });
+      if (!scan) return null;
+
+      return tx.notification.create({
+        data: {
+          scanId,
+          userId: "clinic-001",
+          title: "Scan Completed",
+          message: `Patient scan ${scanId} has been submitted and is ready for review.`,
+          read: false,
+        },
+      });
+    });
+
+    if (!notification) {
       return NextResponse.json({ error: "Scan not found" }, { status: 404 });
     }
-
-    await prisma.notification.create({
-      data: {
-        scanId,
-        userId: "clinic-001",
-        title: "Scan Completed",
-        message: `Patient scan ${scanId} has been submitted and is ready for review.`,
-        read: false,
-      },
-    });
 
     void stubSmsDispatch(scanId);
 

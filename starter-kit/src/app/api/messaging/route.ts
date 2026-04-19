@@ -9,12 +9,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Missing threadId" }, { status: 400 });
   }
 
-  const messages = await prisma.message.findMany({
-    where: { threadId },
-    orderBy: { createdAt: "asc" },
-  });
-
-  return NextResponse.json({ messages });
+  try {
+    const messages = await prisma.message.findMany({
+      where: { threadId },
+      orderBy: { createdAt: "asc" },
+    });
+    return NextResponse.json({ messages });
+  } catch (err) {
+    console.error("[/api/messaging] GET error:", err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
@@ -24,6 +28,15 @@ export async function POST(req: Request) {
 
     if (!threadId || !content || !sender) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    if (!["patient", "dentist"].includes(sender)) {
+      return NextResponse.json({ error: "Invalid sender" }, { status: 400 });
+    }
+
+    const thread = await prisma.thread.findUnique({ where: { id: threadId } });
+    if (!thread) {
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
 
     const message = await prisma.message.create({

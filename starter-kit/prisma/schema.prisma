@@ -29,7 +29,7 @@ model Notification {
 
 model Thread {
   id        String    @id @default(cuid())
-  patientId String
+  patientId String    @unique
   messages  Message[]
   updatedAt DateTime  @updatedAt
 }

@@ -3,6 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Camera, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import MessageSidebar from "@/components/MessageSidebar";
 type StabilityTier = "low" | "medium" | "high";
 
 const STABILITY_COLORS: Record<StabilityTier, string> = {
@@ -10,6 +11,11 @@ const STABILITY_COLORS: Record<StabilityTier, string> = {
   medium: "#f59e0b",
   high: "#22c55e",
 };
+
+const STABILITY_THRESHOLD = 18;
+const FRAMES_TO_ADVANCE = 20;
+const FRAMES_TO_LOCK = 35;
+const FRAMES_TO_DEGRADE = 5;
 
 function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: boolean) {
   const [tier, setTier] = useState<StabilityTier>("low");
@@ -45,17 +51,17 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
         for (let i = 0; i < data.length; i += 4) {
           sad += Math.abs(data[i] - prev[i]) + Math.abs(data[i + 1] - prev[i + 1]) + Math.abs(data[i + 2] - prev[i + 2]);
         }
-        const isStable = sad / (32 * 32) < 18;
+        const isStable = sad / (32 * 32) < STABILITY_THRESHOLD;
 
         if (isStable) { stableFramesRef.current += 1; unstableFramesRef.current = 0; }
         else { unstableFramesRef.current += 1; stableFramesRef.current = 0; }
 
         const cur = currentTierRef.current;
         let next = cur;
-        if (cur === "low" && stableFramesRef.current >= 20) next = "medium";
-        else if (cur === "medium" && stableFramesRef.current >= 35) next = "high";
-        else if (cur === "high" && unstableFramesRef.current >= 5) next = "medium";
-        else if (cur === "medium" && unstableFramesRef.current >= 5) next = "low";
+        if (cur === "low" && stableFramesRef.current >= FRAMES_TO_ADVANCE) next = "medium";
+        else if (cur === "medium" && stableFramesRef.current >= FRAMES_TO_LOCK) next = "high";
+        else if (cur === "high" && unstableFramesRef.current >= FRAMES_TO_DEGRADE) next = "medium";
+        else if (cur === "medium" && unstableFramesRef.current >= FRAMES_TO_DEGRADE) next = "low";
 
         if (next !== cur) { currentTierRef.current = next; setTier(next); }
       }
@@ -79,7 +85,7 @@ function useStabilityScore(videoRef: React.RefObject<HTMLVideoElement>, active: 
   return { tier, reset };
 }
 
-const VIEWS = [
+const SCAN_ANGLES = [
   { label: "Front View", instruction: "Smile with your teeth and look straight at the camera." },
   { label: "Left View", instruction: "Keep smiling and turn your head to the left." },
   { label: "Right View", instruction: "Keep smiling and turn your head to the right." },
@@ -102,7 +108,6 @@ function FaceIllustration({ step }: { step: number }) {
       style={{ transform: containerTransforms[step], transition: "transform 0.4s ease" }}
     >
       <svg viewBox="0 0 200 250" className="w-40 h-auto" style={{ filter: "drop-shadow(0 0 10px #14b8a688)" }}>
-        {/* Head */}
         <path
           d="M100,12 C150,12 178,50 178,95 C178,148 158,190 132,204 C122,212 100,216 100,216 C100,216 78,212 68,204 C42,190 22,148 22,95 C22,50 50,12 100,12 Z"
           fill="none"
@@ -110,7 +115,6 @@ function FaceIllustration({ step }: { step: number }) {
           strokeWidth="3"
           strokeDasharray="6 4"
         />
-        {/* Chin */}
         <path
           d="M68,204 C78,228 122,228 132,204"
           fill="none"
@@ -119,10 +123,8 @@ function FaceIllustration({ step }: { step: number }) {
           strokeDasharray="4 4"
           opacity="0.5"
         />
-        {/* Eyes */}
         <ellipse cx="72" cy="100" rx="10" ry="7" fill="none" stroke="#14b8a6" strokeWidth="1.5" opacity="0.6" />
         <ellipse cx="128" cy="100" rx="10" ry="7" fill="none" stroke="#14b8a6" strokeWidth="1.5" opacity="0.6" />
-        {/* Mouth */}
         <path
           d="M78,155 C88,164 112,164 122,155"
           fill="none"
@@ -130,7 +132,6 @@ function FaceIllustration({ step }: { step: number }) {
           strokeWidth="2"
           opacity="0.6"
         />
-        {/* Step-specific arrow */}
         {step === 1 && (
           <g>
             <line x1="175" y1="110" x2="140" y2="110" stroke="#14b8a6" strokeWidth="2.5" />
@@ -163,7 +164,7 @@ function FaceIllustration({ step }: { step: number }) {
 const TUTORIAL_SLIDES = [
   {
     title: "Front View",
-    description: "Face the camera straight on with a relaxed smile with your teeth showing. Keep your chin level.",
+    description: "Face the camera straight on and smile with your teeth showing. Keep your chin level.",
   },
   {
     title: "Left Side",
@@ -198,7 +199,6 @@ function Tutorial({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md px-6 gap-8">
-        {/* Illustration */}
         <div
           className="w-full flex items-center justify-center py-8"
           onPointerDown={(e) => { dragStartX.current = e.clientX; }}
@@ -226,7 +226,6 @@ function Tutorial({ onDone }: { onDone: () => void }) {
           </AnimatePresence>
         </div>
 
-        {/* Dot indicators */}
         <div className="flex gap-2">
           {TUTORIAL_SLIDES.map((_, i) => (
             <button
@@ -237,7 +236,6 @@ function Tutorial({ onDone }: { onDone: () => void }) {
           ))}
         </div>
 
-        {/* Navigation */}
         <div className="flex w-full items-center justify-between gap-4">
           <button
             onClick={goPrev}
@@ -287,6 +285,7 @@ export default function ScanningFlow() {
   const [camError, setCamError] = useState<string | null>(null);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
+  const [scanId, setScanId] = useState<string | null>(null);
 
   const scanActive = camReady && currentStep < 5;
   const { tier, reset } = useStabilityScore(videoRef, scanActive);
@@ -325,22 +324,23 @@ export default function ScanningFlow() {
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL("image/jpeg");
 
-    setCapturedImages((prev) => {
-      const next = [...prev, dataUrl];
-      // All 5 angles captured — submit to upload endpoint
-      if (next.length === VIEWS.length) {
-        void fetch("/api/scans/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ images: next }),
-        }).catch((err) => console.error("Upload failed:", err));
-      }
-      return next;
-    });
+    const next = [...capturedImages, dataUrl];
+    setCapturedImages(next);
+
+    if (next.length === SCAN_ANGLES.length) {
+      void fetch("/api/scans/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: next }),
+      })
+        .then((r) => r.json())
+        .then(({ scanId: id }) => setScanId(id))
+        .catch((err) => console.error("Upload failed:", err));
+    }
 
     setCurrentStep((prev) => prev + 1);
     reset();
-  }, [reset]);
+  }, [capturedImages, reset]);
 
   if (showTutorial) {
     return <Tutorial onDone={() => setShowTutorial(false)} />;
@@ -348,11 +348,10 @@ export default function ScanningFlow() {
 
   return (
     <div className="flex flex-col items-center bg-black min-h-screen text-white">
-      {/* Header */}
       <div className="p-4 w-full bg-zinc-900 border-b border-zinc-800 flex justify-between items-center">
         <h1 className="font-bold text-teal-400">DentalScan AI</h1>
         <span className="text-xs text-zinc-500">
-          {currentStep < 5 ? `${VIEWS[currentStep].label} · Step ${currentStep + 1}/5` : "Complete"}
+          {currentStep < 5 ? `${SCAN_ANGLES[currentStep].label} · Step ${currentStep + 1}/5` : "Complete"}
         </span>
       </div>
 
@@ -362,7 +361,6 @@ export default function ScanningFlow() {
         </div>
       )}
 
-      {/* Main Viewport */}
       <div className="relative w-full max-w-md aspect-[3/4] bg-zinc-950 overflow-hidden flex items-center justify-center mt-1">
         {currentStep < 5 ? (
           <>
@@ -374,7 +372,6 @@ export default function ScanningFlow() {
               className="w-full h-full object-cover"
             />
 
-            {/* Head outline overlay */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               <svg
                 viewBox="0 0 200 250"
@@ -397,10 +394,20 @@ export default function ScanningFlow() {
                   animate={{ stroke: overlayColor, opacity: 0.45 }}
                   transition={{ duration: 0.4 }}
                 />
+                <motion.ellipse
+                  cx="100"
+                  cy="162"
+                  rx="42"
+                  ry="21"
+                  fill="none"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
+                  animate={{ stroke: overlayColor, opacity: 0.7 }}
+                  transition={{ duration: 0.4 }}
+                />
               </svg>
             </div>
 
-            {/* Instruction */}
             <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black to-transparent" />
             <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none">
               <AnimatePresence mode="wait">
@@ -412,7 +419,7 @@ export default function ScanningFlow() {
                   transition={{ duration: 0.25 }}
                   className="text-[11px] text-zinc-300 uppercase tracking-widest px-4 text-center"
                 >
-                  {VIEWS[currentStep].instruction}
+                  {SCAN_ANGLES[currentStep].instruction}
                 </motion.p>
               </AnimatePresence>
             </div>
@@ -421,12 +428,15 @@ export default function ScanningFlow() {
           <div className="text-center p-10">
             <CheckCircle2 size={48} className="text-green-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold">Scan Complete</h2>
-            <p className="text-zinc-400 mt-2">Uploading results…</p>
+            {!scanId
+              ? <p className="text-zinc-400 mt-2">Uploading results…</p>
+              : <p className="text-zinc-400 mt-2">Your clinic has been notified and will be in touch soon.</p>
+            }
+            {scanId && <MessageSidebar scanId={scanId} />}
           </div>
         )}
       </div>
 
-      {/* Capture button */}
       <div className="p-10 w-full flex justify-center">
         {currentStep < 5 && (
           <button
@@ -441,9 +451,8 @@ export default function ScanningFlow() {
         )}
       </div>
 
-      {/* Thumbnails */}
       <div className="flex gap-2 p-4 overflow-x-auto w-full">
-        {VIEWS.map((v, i) => (
+        {SCAN_ANGLES.map((v, i) => (
           <div
             key={i}
             className={`w-16 h-20 rounded border-2 shrink-0 ${
