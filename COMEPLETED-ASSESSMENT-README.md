@@ -4,7 +4,7 @@ Full stack implementation of the DentalScan engineering challenge. Built with Ne
 
 **Live Demo:** https://dentalscan-assesment.vercel.app/
 
-**SQLite local dev note** SQLite was used for a zero-config setup and can easily be changed to PostgreSQL by changing one line in `schema.prisma`. This makes it so the messaging function is not transferred via Vercel deployment and can only be seen at the local host port. More info below.
+**SQLite Local Dev Note:** SQLite was used for a zero-config setup and can easily be changed to PostgreSQL by changing one line in `schema.prisma`. This makes it so the messaging function is not transferred via Vercel deployment and can only be seen at the local host port. More info below.
 
 ---
 
